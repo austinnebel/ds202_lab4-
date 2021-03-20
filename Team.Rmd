@@ -1,0 +1,145 @@
+---
+title: "Lab 4"
+author: "Austin Nebel"
+date: "3/19/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+def <- read_excel('cyclonesFootball2020.xlsx', sheet='Defensive')
+off <- read_excel('cyclonesFootball2020.xlsx', sheet='Offensive')
+bio <- read_excel('cyclonesFootball2020.xlsx', sheet='Biography')
+```
+
+```{r}
+head(def)
+head(off)
+head(bio)
+```
+
+## Part one: Cleaning data
+
+Although the three Excel sheets are loaded into R, they are not useful before some cleaning. Manipulate the three imported data frames, so that in the cleaned dataset:
+
+1. The player names and opponent names are factors.
+
+2. All offensive and defensive statistics are numerical. The Weight column in biography is also numeric. (Optional: Read ?across and learn to mutate multiple columns simultaneously using the across function in dplyr)
+
+3. Change the Height column in biography into numeric. (Hint: Use a unit that works well)
+
+By cleaning the three data frames in R, at the end of this step you should have the following three clean data frames: defClean, offClean, and bioClean. Print the structures of these data frames using str().
+
+```{r}
+
+def$Name <- as.factor(def$Name)
+def$Opponent_Opponent <- as.factor(def$Opponent_Opponent)
+
+off$Name <- as.factor(off$Name)
+off$Opponent_Opponent <- as.factor(off$Opponent_Opponent)
+
+```
+
+```{r}
+
+defClean <- def %>%
+  mutate(across(3:11, as.numeric))
+
+off$`Passing_CMP-ATT` <- as.integer(gsub('-', '', off$`Passing_CMP-ATT`)) #removes `-` symbol from this column to prevent NA's
+offClean <- off %>%
+  mutate(across(3:12, as.numeric))
+
+
+bioClean <- bio %>%
+  separate(Height, c("Feet", "Inches")) %>% #split height by '-' into ft and inch
+  mutate(across(c("Feet", "Inches"), as.numeric)) %>% #make feet in inch numeric
+  mutate(Inches = Inches/12 ) %>% #make inches a percentage out of 12
+  mutate(Height = round(Feet + Inches,2)) %>% #Add feet and inches into new height column and round
+  select(-c("Feet", "Inches")) %>% #remove ft and inch columns
+  mutate(across("Weight", as.numeric)) #make weight numeric
+
+
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+## Part two: Tidying
+
+For the following questions, work on the cleaned data frames defClean, offClean, and bioClean.
+
+1. Reformat the offClean data frame into a tidy format using pivot_longer. The type of statistic (Receiving_REC for the number of receivings, Receiving_YDS for receiving yards, etc) is added as a new key column named stat.
+
+2. Show on the distributions of the offensive statistics. The distribution of each offensive statsitic should be shown in a separate facet. Explain the patterns you see.
+
+3. Did ISU have better offense against Oregon or Oklahoma? Answer this question by creating a scatterplot with the x- and y-axes being the receiving yards of the ISU players against these two opponents. A large number of receiving yards indicates good offense.
+
+Now turn our attention to the player biography.
+
+4. Separate the Hometown column into two columns, namely, the city and the state where the player comes from. Print the first few rows of these two columns. (Hint: look at the sep= argument of separate)
+
+5. How many players are there from each state?
+
+```{r}
+offClean <- offClean %>%
+  pivot_longer(3:12, names_to = "stat", values_to = "stat_count")
+  
+offClean %>%
+  ggplot(aes(x=Opponent_Opponent, y=stat_count)) + geom_boxplot() + facet_grid(rows="stat")+
+  theme(strip.text.y.right = element_text(angle = 0), axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+ISU has a wider range of passing years than most other statistics. Their rushing yards are much less thatn their passing yards. 
+
+```{r}
+off %>%
+  filter(Opponent_Opponent == "Oregon" | Opponent_Opponent == "Oklahoma") %>%
+  ggplot(aes(x=Name, y=Receiving_YDS)) + geom_point()  + facet_grid(rows="Opponent_Opponent") +
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5))
+```
+
+ISU had a better game against Oklahoma. This can be seen in both this facet plot and the previous one.
+
+```{r}
+bioSep <- bioClean %>%
+  separate(Hometown, c("City", "State"), sep=", ")
+
+head(bioSep)
+
+bioSep %>% group_by(State) %>%
+  summarise(`State_Count` = n())
+```
+
+```{r}
+select(bioSep, Name, State) %>%
+  semi_join(offClean, by=c("Name" = "Name")) %>% 
+  group_by(State) %>%
+  summarise(`State_Count` = n()) %>%
+  ggplot(aes(x=State, y=`State_Count`, fill=State)) + geom_bar(stat="identity") + ggtitle("Offensive Players")
+
+
+select(bioSep, Name, State) %>%
+  semi_join(defClean, by=c("Name" = "Name"))%>% group_by(State) %>%
+  summarise(`State_Count` = n()) %>%
+  ggplot(aes(x=State, y=`State_Count`, fill=State)) + geom_bar(stat="identity") + ggtitle("Offensive Players")
+
+```
+
+
+  
+```{r}
+offClean %>%
+  select(Name, stat_count, Opponent_Opponent) %>%
+  ggplot(aes(x=Name, y=stat_count)) + geom_point()  + facet_grid(rows="Opponent_Opponent") + geom_abline() +
+  theme(strip.text.y.right = element_text(angle = 0), axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+  
+  
